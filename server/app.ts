@@ -39,6 +39,7 @@ import { AudioService } from './audio';
 import { GitHubService } from './github';
 import { AudioModels, audioSettingsSchema } from './audio-settings';
 import { prepareWorkspace, runAgent, sharedWorkspacePath } from './runner';
+import { prepareBrainWorkspace } from './brain-workspace';
 import { splitVoice } from './protocol';
 import { McpService, McpError } from './mcp';
 import { BrowserService, BrowserError } from './browser';
@@ -126,7 +127,12 @@ export function createApp(config: Config, routingDependencies: RoutingDependenci
   const terminal = new TerminalService(config, (url) =>
     browser.interact('terminal', { type: 'navigate', url }),
   );
-  const skills = new SkillService(store, config.dataDir, () => publish({ type: 'skills_changed' }));
+  const skills = new SkillService(
+    store,
+    config.dataDir,
+    () => publish({ type: 'skills_changed' }),
+    config.projectSkillDirectory || (config.brainBootstrap ? 'skills' : undefined),
+  );
   const browser = new BrowserService(config, (conversationId) => {
     if (conversationId !== 'terminal') publish({ type: 'browser_changed', conversationId });
   });
@@ -182,6 +188,11 @@ export function createApp(config: Config, routingDependencies: RoutingDependenci
       }
       store.setRun(runId, 'running');
       publish({ type: 'transcript', conversationId: chat.id, runId });
+      if (
+        config.repositoryAllowlist?.length &&
+        (!chat.repo || !config.repositoryAllowlist.includes(chat.repo))
+      )
+        throw new HttpError(403, 'Repository non abilitata in questo ambiente.');
       if (!chat.workspace) {
         // A shared checkout that already exists is reused instantly: nothing to announce.
         const reused =
@@ -214,6 +225,12 @@ export function createApp(config: Config, routingDependencies: RoutingDependenci
           .prepare('UPDATE conversations SET workspace=? WHERE id=?')
           .run(chat.workspace, chat.id);
       }
+      if (!config.demo && config.brainBootstrap && chat.repo === config.defaultRepository)
+        await prepareBrainWorkspace(
+          chat.workspace!,
+          config.projectSkillDirectory || 'skills',
+          signal,
+        );
       const documents = store.db
         .prepare(
           `SELECT a.id,a.name,a.mime,a.data FROM attachments a
@@ -595,6 +612,9 @@ export function createApp(config: Config, routingDependencies: RoutingDependenci
       maxRuns: config.maxRuns,
       unrestricted: config.unrestricted,
       workspaceMode: config.workspaceMode,
+      defaultRepository: config.defaultRepository || null,
+      quickChat: !!config.quickChat,
+      defaultGlobalSkills: !!config.defaultGlobalSkills,
     }),
   );
   function terminalBrowserEnabled() {
@@ -1026,15 +1046,32 @@ export function createApp(config: Config, routingDependencies: RoutingDependenci
   app.get('/api/agents/:agent/models', async (req, res) => {
     res.json(await catalog(z.enum(['claude', 'codex']).parse(req.params.agent), config.demo));
   });
-  app.get('/api/github', async (_req, res) => res.json(await github.info()));
+  app.get('/api/github', async (_req, res) => {
+    const info = await github.info();
+    res.json({
+      ...info,
+      repositories: config.repositoryAllowlist?.length
+        ? info.repositories.filter((r) => config.repositoryAllowlist!.includes(r.fullName))
+        : info.repositories,
+    });
+  });
   app.post('/api/conversations', async (req, res) => {
     const input = chatInput.parse(req.body);
     await checkRouting(input.agent, input.routing);
+    const repo = input.repo === undefined ? config.defaultRepository || null : input.repo;
+    if (config.repositoryAllowlist?.length && (!repo || !config.repositoryAllowlist.includes(repo)))
+      throw new HttpError(403, 'Repository non abilitata in questo ambiente.');
+    if (
+      config.brainBootstrap &&
+      repo === config.defaultRepository &&
+      input.workspaceMode === 'isolated'
+    )
+      throw new HttpError(400, 'Il brain predefinito usa la cartella condivisa.');
     const chat = store.create(
       input.agent,
-      input.repo || null,
+      repo,
       input.title,
-      input.tools,
+      input.tools ?? { mcp: null, skills: config.defaultGlobalSkills ? null : [] },
       input.workspaceMode ?? config.workspaceMode,
     );
     if (input.routing) {

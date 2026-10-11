@@ -21,6 +21,9 @@ export interface Settings {
   maxRuns: number;
   unrestricted: boolean;
   workspaceMode: WorkspaceMode;
+  defaultRepository?: string | null;
+  quickChat?: boolean;
+  defaultGlobalSkills?: boolean;
 }
 export interface GitHubInfo {
   connected: boolean;

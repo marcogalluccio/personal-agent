@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { realpath } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import type { Config } from './config';
 import type { Conversation } from './store';
 import { agentEnvironment } from './runner';
@@ -32,7 +34,14 @@ export class GitService {
   constructor(private config: Config) {}
   async command(cwd: string, args: string[], signal?: AbortSignal, raw = false) {
     try {
-      const result = await exec('git', ['-c', 'core.hooksPath=/dev/null', ...args], {
+      const locked = path.join(cwd, 'scripts', 'git-locked');
+      const useLock = this.config.brainBootstrap && existsSync(locked);
+      const gitArgs = useLock
+        ? ['git', ...args]
+        : this.config.brainBootstrap
+          ? args
+          : ['-c', 'core.hooksPath=/dev/null', ...args];
+      const result = await exec(useLock ? locked : 'git', gitArgs, {
         cwd,
         env: {
           ...agentEnvironment(this.config),
@@ -131,6 +140,11 @@ export class GitService {
   ) {
     const state = await this.view(chat, signal);
     if (!state.ready) throw new GitError(409, 'Prepara prima il repository.');
+    if (this.config.brainBootstrap && chat.repo === this.config.defaultRepository)
+      throw new GitError(
+        409,
+        'Il brain resta sul branch principale. Chiedi all’agente di usare un worktree per il lavoro strutturale.',
+      );
     if (state.changedFiles)
       throw new GitError(
         409,

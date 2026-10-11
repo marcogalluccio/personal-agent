@@ -77,6 +77,7 @@ export class SkillService {
     private store: Store,
     private dataDir: string,
     private changed: () => void,
+    private projectSkillDirectory?: string,
   ) {}
   private globals(): GlobalSkill[] {
     return (this.store.setting('skills') as GlobalSkill[] | undefined) || [];
@@ -152,6 +153,12 @@ export class SkillService {
       for (const entry of entries) {
         const full = path.join(dir, entry.name);
         if (entry.isSymbolicLink()) {
+          // Native CLI links into the configured source are catalogued at the source path.
+          if (
+            thisSkillDirectory &&
+            (await realpath(full).catch(() => '')).startsWith(thisSkillDirectory + path.sep)
+          )
+            continue;
           if (
             entry.name === 'SKILL.md' ||
             ['.agents', '.claude', '.codex', 'skills'].includes(entry.name) ||
@@ -160,10 +167,25 @@ export class SkillService {
             warnings.push(`Collegamento simbolico non importato: ${path.relative(root!, full)}`);
           continue;
         }
-        if (entry.isDirectory() && !ignored.has(entry.name)) await walk(full, depth + 1);
+        if (
+          entry.isDirectory() &&
+          full !== thisSkillDirectory &&
+          !ignored.has(entry.name) &&
+          !(
+            thisSkillDirectory &&
+            (dir === thisSkillDirectory || dir.startsWith(thisSkillDirectory + path.sep)) &&
+            entry.name.startsWith('_')
+          )
+        )
+          await walk(full, depth + 1);
         if (!entry.isFile() || entry.name !== 'SKILL.md') continue;
         const relative = path.relative(root!, full).split(path.sep).join('/');
-        if (!/(^|\/)\.(agents|claude|codex)\/skills\/[^/]+\/SKILL\.md$/.test(relative)) continue;
+        const configured = thisSkillDirectory && full.startsWith(thisSkillDirectory + path.sep);
+        if (
+          !configured &&
+          !/(^|\/)\.(agents|claude|codex)\/skills\/[^/]+\/SKILL\.md$/.test(relative)
+        )
+          continue;
         try {
           if ((await lstat(full)).size > 65536) throw new Error('file troppo grande');
           const meta = metadata(await readFile(full, 'utf8'));
@@ -181,12 +203,29 @@ export class SkillService {
         }
       }
     }
+    const thisSkillDirectory = this.projectSkillDirectory
+      ? path.resolve(root, this.projectSkillDirectory)
+      : undefined;
+    if (
+      thisSkillDirectory &&
+      (!thisSkillDirectory.startsWith(root + path.sep) ||
+        (await realpath(thisSkillDirectory).catch(() => thisSkillDirectory)) !== thisSkillDirectory)
+    )
+      throw new SkillError(400, 'Cartella skill esterna o collegamento simbolico non consentito.');
+    // Search the configured source first, so unrelated folders cannot exhaust the discovery budget.
+    if (thisSkillDirectory) await walk(thisSkillDirectory, 0);
     await walk(root, 0);
     if (limited)
       warnings.push(
         'Repository molto grande: elenco limitato a 100 skill, 6000 cartelle e 12 livelli.',
       );
-    return { skills: skills.sort((a, b) => a.id.localeCompare(b.id)), warnings, ready: true };
+    return {
+      skills: [...new Map(skills.map((s) => [s.id, s])).values()].sort((a, b) =>
+        a.id.localeCompare(b.id),
+      ),
+      warnings,
+      ready: true,
+    };
   }
   async projectContent(chat: Conversation, id: string) {
     const found = (await this.project(chat)).skills.find((s) => s.id === id);

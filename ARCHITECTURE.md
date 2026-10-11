@@ -48,6 +48,15 @@ Messages and attachments are persisted before execution. There is one active run
 
 The runner launches `claude -p` or `codex exec`, captures structured output, and saves the CLI session identifier for future resume. Public progress and tool activity are normalized for the UI. Events are persisted and replayed over SSE when a client reconnects. Closing the browser or an SSE connection does not stop work.
 
+An optional ready-workspace preset supplies a default repository and global tool inheritance at
+conversation creation. Quick Chat bypasses the setup dialog while retaining the existing chat UI.
+An application repository allowlist can limit repository browsing, creation and execution; it does
+not constrain an unrestricted agent shell. Deployment credentials remain the access boundary.
+`server/brain-workspace.ts` optionally prepares the default shared brain's native memory and skill
+links and Git hooks before each real turn. Preparation is serialized per checkout and refuses to
+overwrite user content. Project skill discovery may include an administrator-configured versioned
+source directory. Bootstrap does not synchronize files, install plugins or migrate conversations.
+
 Cancellation terminates the process group and escalates after a grace period. At shutdown, new starts are blocked; after restart, previously active runs are marked interrupted instead of replaying actions. Pending messages can resume automatically unless their queue is paused.
 
 An explicit final-response marker, `<richiesta_input/>`, records a real need for user input and pauses the queue. It is removed from visible text. A direct user reply takes priority; remaining queued messages stay paused until resumed. A completed process indicates protocol completion, not independently verified task correctness.

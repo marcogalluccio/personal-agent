@@ -26,6 +26,7 @@ export function agentEnvironment(config?: Pick<Config, 'dataDir'>): NodeJS.Proce
     'USER',
     'SHELL',
     'LANG',
+    'TZ',
     'TMPDIR',
     'XDG_CONFIG_HOME',
     'CLAUDE_CONFIG_DIR',
@@ -76,7 +77,7 @@ export function commandFor(
         'off',
         ...(servers.length ? ['--mcp-config', JSON.stringify({ mcpServers: claudeMcp })] : []),
         '--append-system-prompt',
-        VOICE_RULES,
+        VOICE_RULES + brainInstructions(config, chat),
         ...(config.unrestricted
           ? ['--dangerously-skip-permissions']
           : ['--permission-mode', 'dontAsk']),
@@ -94,7 +95,7 @@ export function commandFor(
     '-c',
     'forced_login_method="chatgpt"',
     '-c',
-    `developer_instructions=${JSON.stringify(VOICE_RULES)}`,
+    `developer_instructions=${JSON.stringify(VOICE_RULES + brainInstructions(config, chat))}`,
     ...(config.unrestricted
       ? ['--dangerously-bypass-approvals-and-sandbox']
       : ['-c', 'approval_policy="never"', '-c', 'sandbox_mode="workspace-write"']),
@@ -288,6 +289,10 @@ export function skillPromptFor(input: string, skillInstructions: string) {
   return skillInstructions
     ? `${skillInstructions}\n\n--- Fine catalogo skill del turno ---\n\nRichiesta dell’utente:\n${input}`
     : input;
+}
+function brainInstructions(config: Config, chat: Conversation) {
+  if (!config.brainBootstrap || chat.repo !== config.defaultRepository) return '';
+  return '\nQuesta chat lavora nel brain predefinito. All’inizio della sessione leggi AGENTS.md, CLAUDE.md, memory/MEMORY.md e i daily-log di oggi presenti; poi il contesto locale dell’area interessata. Le memorie di area restano nei percorsi del repository: leggile quando pertinenti. Rispetta le approvazioni previste dal brain, anche con autonomia tecnica abilitata. Non trasferire altri brain o materiali locali mancanti. Se l’utente fornisce un handover, confrontalo con i file attuali prima di riprendere. Usa scripts/git-locked per Git e le skill di sync/debrief del brain per allineare e salvare il lavoro; non fare pull, reset o stash automatici e non riattivare altri agenti o servizi. Sei su Linux: usa anteprime nel browser integrato e file scaricabili al posto di Finder, open e percorsi del Mac. Dichiara gli strumenti o gli asset realmente mancanti.';
 }
 export interface HistoryMessage {
   role: 'user' | 'assistant';

@@ -22,6 +22,59 @@ The backend runs the official agent CLIs with your own subscription logins. Opti
 - **Internals:** see [ARCHITECTURE.md](ARCHITECTURE.md).
 - **Coding-agent instructions:** see [AGENTS.md](AGENTS.md).
 
+## Ready workspace (optional)
+
+A personal instance can start every new chat in an administrator-configured repository,
+without asking the user to select a repository or tools. Configure once on the server:
+
+```dotenv
+DEFAULT_REPOSITORY=your-account/your-brain
+WORKSPACE_MODE=shared
+QUICK_CHAT=true
+DEFAULT_GLOBAL_SKILLS=all
+REPOSITORY_ALLOWLIST=your-account/your-brain
+PROJECT_SKILL_DIRECTORY=skills
+BRAIN_BOOTSTRAP=true
+```
+
+With `QUICK_CHAT=true`, each existing New Chat button opens a conversation immediately.
+The default agent is Claude Code; model and effort can still be changed inside the chat.
+API requests that omit `repo` inherit `DEFAULT_REPOSITORY`; explicit `repo: null` keeps
+its meaning unless the optional allowlist rejects repository-free chats. Explicit per-chat
+tool selections still take precedence. `DEFAULT_GLOBAL_SKILLS=all` inherits enabled global
+skills compatible with that agent, including future additions; disabled skills and MCP
+connections remain disabled. Existing chats retain their settings and history.
+
+`PROJECT_SKILL_DIRECTORY` adds a versioned skill source such as `skills/operations/name/SKILL.md`
+to both agents' per-turn catalog. Source files and supporting references remain in the checkout;
+folders beginning with `_` in that source are excluded. Discovery remains bounded and never
+follows links outside the repository.
+
+`BRAIN_BOOTSTRAP` is opt-in for brain repositories with `memory/`, the configured skill directory
+(default `skills`), executable `scripts/git-locked`, and `githooks/`. Before a real turn, it:
+
+- Links Claude's workspace memory to the repository's `memory/` using the actual server path.
+- Registers native Claude and Codex skill links without replacing existing skill content.
+- Configures the repository's own Git hooks through its lock and uses that lock for Git UI operations.
+- Keeps branch switching in the shared brain disabled; structural work uses separate worktrees.
+- Adds startup guidance to read the brain's instructions, memory, current logs and relevant area context.
+
+An empty native memory placeholder may become a link. A nonempty directory, conflicting link,
+or symlinked configuration parent stops preparation with an error instead of overwriting it.
+Bootstrap does not fetch, pull, reset, commit, push, install plugins, copy credentials, or start services.
+Use the brain's own synchronization workflow and confirm any conflicts. The ready workspace also
+does not synchronize desktop conversations: a Markdown handover can be uploaded to the new chat.
+
+The repository allowlist filters browsing and creation/execution through the app. It is **not a
+security sandbox for an unrestricted shell**: keep GitHub credentials scoped to the intended
+repositories, and do not mount excluded brains or sensitive local files. To add another brain later,
+provision its access deliberately; adding a default repository does not clone other repositories.
+
+Provision required plugins, connected services, fonts and rendering tools separately inside the
+agent runtime. Host tools and logins are not automatically available inside Docker. The built-in
+browser and generated-file downloads support mobile previews and handovers, but demo mode does
+not verify real subscriptions, services, plugins or rendering dependencies.
+
 ## Docker self-hosting
 
 ### 1. Requirements

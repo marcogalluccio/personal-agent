@@ -107,14 +107,15 @@ function App() {
     [sending, setSending] = useState(false),
     [creating, setCreating] = useState(false);
   const [repoRequired, setRepoRequired] = useState(false);
+  const newChatPending = useRef(false);
   const [chatRouting, setChatRouting] = useState<RoutingConfig | null>(null);
   const [chatTools, setChatTools] = useState<ChatTools>({ mcp: null, skills: [] });
   useEffect(() => {
     if (create) {
-      setChatTools({ mcp: null, skills: [] });
+      setChatTools({ mcp: null, skills: settings?.defaultGlobalSkills ? null : [] });
       setChatRouting(null);
     }
-  }, [create]);
+  }, [create, settings?.defaultGlobalSkills]);
   const [chatMenu, setChatMenu] = useState<Chat | null>(null),
     [chatAction, setChatAction] = useState<'rename' | 'delete' | null>(null),
     [chatTitle, setChatTitle] = useState(''),
@@ -552,18 +553,42 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [notice]);
-  async function newChat(event: React.FormEvent) {
-    event.preventDefault();
-    if (repoRequired && !repo.trim()) return;
+  async function openNewChat() {
+    if (creating || newChatPending.current) return;
+    newChatPending.current = true;
+    try {
+      const ready = settings || (await api<Settings>('/config'));
+      if (!settings) setSettings(ready);
+      if (ready.quickChat) {
+        await newChat();
+        setSidebar(false);
+      } else {
+        setRepo(ready.defaultRepository || '');
+        setCreate(true);
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      newChatPending.current = false;
+    }
+  }
+  async function newChat(event?: React.FormEvent) {
+    event?.preventDefault();
+    const quick = !event;
+    if (!quick && repoRequired && !repo.trim()) return;
     setError('');
     setCreating(true);
     try {
       const chat = await api<Chat>('/conversations', {
         agent,
-        repo: repo.trim() || null,
-        ...(repo.trim() && workspaceMode ? { workspaceMode } : {}),
-        tools: chatTools,
-        routing: agent === 'codex' ? chatRouting : null,
+        ...(quick
+          ? {}
+          : {
+              repo: repo.trim() || null,
+              ...(repo.trim() && workspaceMode ? { workspaceMode } : {}),
+              tools: chatTools,
+              routing: agent === 'codex' ? chatRouting : null,
+            }),
       });
       setCreate(false);
       setRepo('');
@@ -851,8 +876,9 @@ function App() {
         </a>
         <button
           className="new-chat"
+          disabled={creating}
           onClick={() => {
-            setCreate(true);
+            void openNewChat();
             setSidebar(false);
           }}
         >
@@ -1012,7 +1038,12 @@ function App() {
             <span className="private-label">
               <span className="status-dot" /> Personale
             </span>
-            <button className="icon-button" aria-label="Nuova chat" onClick={() => setCreate(true)}>
+            <button
+              className="icon-button"
+              aria-label="Nuova chat"
+              disabled={creating}
+              onClick={() => void openNewChat()}
+            >
               <Plus size={20} />
             </button>
           </div>
@@ -1059,7 +1090,11 @@ function App() {
             </div>
             <h1>Su cosa lavoriamo?</h1>
             <p>Scegli Claude Code o Codex. Scrivi, parla o apri un repository.</p>
-            <button className="primary start-button" onClick={() => setCreate(true)}>
+            <button
+              className="primary start-button"
+              disabled={creating}
+              onClick={() => void openNewChat()}
+            >
               <Plus size={18} /> Inizia una conversazione
             </button>
             <div className="welcome-cards">
