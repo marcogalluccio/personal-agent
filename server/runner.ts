@@ -27,6 +27,8 @@ export function agentEnvironment(config?: Pick<Config, 'dataDir'>): NodeJS.Proce
     'SHELL',
     'LANG',
     'TZ',
+    'PLAYWRIGHT_BROWSERS_PATH',
+    'BROWSER_NO_SANDBOX',
     'TMPDIR',
     'XDG_CONFIG_HOME',
     'CLAUDE_CONFIG_DIR',
