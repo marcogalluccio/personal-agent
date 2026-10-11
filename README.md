@@ -38,7 +38,9 @@ BRAIN_BOOTSTRAP=true
 ```
 
 With `QUICK_CHAT=true`, each existing New Chat button opens a conversation immediately.
-The default agent is Claude Code; model and effort can still be changed inside the chat.
+The sidebar offers Claude Code and Codex for new chats. The choice is remembered on the
+current device, defaults to Claude Code, and applies to every New Chat button. Changing it
+does not change existing conversations. Model and effort can still be changed inside a chat.
 API requests that omit `repo` inherit `DEFAULT_REPOSITORY`; explicit `repo: null` keeps
 its meaning unless the optional allowlist rejects repository-free chats. Explicit per-chat
 tool selections still take precedence. `DEFAULT_GLOBAL_SKILLS=all` inherits enabled global

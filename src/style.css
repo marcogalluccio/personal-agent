@@ -124,6 +124,27 @@ button svg {
   font-weight: 550;
   box-shadow: 0 2px 3px #30303004;
 }
+.quick-agent-choice {
+  margin-bottom: 10px;
+}
+.quick-agent-label {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.quick-agent-choice .agent-options {
+  gap: 6px;
+}
+.quick-agent-choice .agent-options button {
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 6px;
+  gap: 4px;
+  justify-content: center;
+}
+.quick-agent-choice .agent-options strong {
+  font-size: 12px;
+}
 .search {
   display: flex;
   align-items: center;

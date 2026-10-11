@@ -67,6 +67,13 @@ const TerminalSettings = React.lazy(() => import('./TerminalSettings'));
 import { BrowserPanel } from './BrowserPanel';
 
 const agentName = (agent?: string) => (agent === 'codex' ? 'Codex' : 'Claude Code');
+function preferredAgent(): 'claude' | 'codex' {
+  try {
+    return localStorage.getItem('pa-preferred-agent') === 'codex' ? 'codex' : 'claude';
+  } catch {
+    return 'claude';
+  }
+}
 const MarkdownReader = React.lazy(() => import('./MarkdownReader'));
 function App() {
   const [markdownDocument, setMarkdownDocument] = useState<MarkdownDocument>();
@@ -88,7 +95,7 @@ function App() {
   );
   const [sidebar, setSidebar] = useState(false),
     [create, setCreate] = useState(false),
-    [agent, setAgent] = useState<'claude' | 'codex'>('claude'),
+    [agent, setAgent] = useState<'claude' | 'codex'>(preferredAgent),
     [repo, setRepo] = useState(''),
     [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>();
   const { draft, setDraft, images, setImages, draftReady, draftError } = useDraft(selected);
@@ -110,6 +117,13 @@ function App() {
   const newChatPending = useRef(false);
   const [chatRouting, setChatRouting] = useState<RoutingConfig | null>(null);
   const [chatTools, setChatTools] = useState<ChatTools>({ mcp: null, skills: [] });
+  useEffect(() => {
+    try {
+      localStorage.setItem('pa-preferred-agent', agent);
+    } catch {
+      // Private browsing or unavailable storage must not block a new chat.
+    }
+  }, [agent]);
   useEffect(() => {
     if (create) {
       setChatTools({ mcp: null, skills: settings?.defaultGlobalSkills ? null : [] });
@@ -874,6 +888,27 @@ function App() {
             personal<span className="brand-light">agent</span>
           </span>
         </a>
+        {settings?.quickChat && (
+          <div className="quick-agent-choice" role="group" aria-label="Agente per le nuove chat">
+            <div className="quick-agent-label">Agente per le nuove chat</div>
+            <div className="agent-options">
+              {(['claude', 'codex'] as const).map((choice) => (
+                <button
+                  type="button"
+                  key={choice}
+                  aria-label={`Nuove chat con ${agentName(choice)}`}
+                  aria-pressed={agent === choice}
+                  className={agent === choice ? 'chosen' : ''}
+                  disabled={creating}
+                  onClick={() => setAgent(choice)}
+                >
+                  <AgentLogo agent={choice} />
+                  <strong>{agentName(choice)}</strong>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <button
           className="new-chat"
           disabled={creating}
