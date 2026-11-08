@@ -446,3 +446,47 @@ test('audio settings persist, validate model capabilities and preserve cached fo
     await rm(dir, { recursive: true, force: true });
   }
 });
+test('request bodies with Content-Encoding are refused before parsing', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'pa-inflate-'));
+  const config = {
+    ...readConfig(),
+    dataDir: dir,
+    password: 'a-secure-test-password-only',
+    port: 4310,
+    origin: 'http://localhost:4310',
+  };
+  const runtime = createApp(config);
+  const server = runtime.app.listen(0, '127.0.0.1');
+  await new Promise<void>((r) => server.once('listening', r));
+  config.port = (server.address() as any).port;
+  const base = `http://127.0.0.1:${config.port}/api`;
+  const login = (extra: Record<string, string>, body: string) =>
+    fetch(base + '/login', {
+      method: 'POST',
+      headers: { Host: 'localhost:4310', 'Content-Type': 'application/json', ...extra },
+      body,
+    });
+  try {
+    for (const encoding of ['br', 'gzip', 'deflate']) {
+      const res = await login(
+        { 'Content-Encoding': encoding },
+        'not really compressed',
+      );
+      assert.equal(res.status, 415, encoding);
+    }
+    assert.equal((await login({}, JSON.stringify({ password: 'wrong-password' }))).status, 401);
+    assert.equal(
+      (
+        await login(
+          { 'Content-Encoding': 'identity' },
+          JSON.stringify({ password: 'a-secure-test-password-only' }),
+        )
+      ).status,
+      200,
+    );
+  } finally {
+    await runtime.close();
+    await new Promise<void>((r) => server.close(() => r()));
+    await rm(dir, { recursive: true, force: true });
+  }
+});

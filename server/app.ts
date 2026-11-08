@@ -515,7 +515,9 @@ export function createApp(config: Config, routingDependencies: RoutingDependenci
       return res.status(403).json({ error: 'Origine non autorizzata.' });
     next();
   });
-  app.use(express.json({ limit: '128kb' }));
+  // inflate: false: any Content-Encoding other than identity gets 415 before
+  // zlib/brotli can touch an unauthenticated request body.
+  app.use(express.json({ limit: '128kb', inflate: false }));
   function session(req: Request) {
     if (!config.password) return true;
     const token = req.headers.cookie
@@ -1392,6 +1394,8 @@ export function createApp(config: Config, routingDependencies: RoutingDependenci
     if (res.headersSent) return res.end();
     if (err instanceof z.ZodError)
       return res.status(400).json({ error: 'Dati non validi. Controlla i campi inseriti.' });
+    if (err?.type === 'encoding.unsupported')
+      return res.status(415).json({ error: 'Codifica del contenuto non supportata.' });
     if (err instanceof multer.MulterError)
       return res.status(413).json({
         error:
